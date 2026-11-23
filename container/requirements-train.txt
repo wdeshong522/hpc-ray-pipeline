@@ -1,0 +1,15 @@
+# Direct dependencies of the LoRA training environment (Stage 1).
+# Versions copied from the validated Wahab env `dh-lora-py312`.
+# Transitive packages are held to their validated versions by
+# constraints-train.txt (applied with `pip install -c`).
+torch==2.4.1+cu124
+transformers==4.51.0
+peft==0.14.0
+trl==0.13.0
+accelerate==1.2.1
+bitsandbytes==0.50.2
+datasets==2.21.0
+ray[train]==2.58.0
+numpy==1.26.4
+sentencepiece==0.2.2
+huggingface_hub==0.36.2

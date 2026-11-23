@@ -1,0 +1,7 @@
+# Direct dependencies of the serving environment (Stages 2 and 3).
+# Versions copied from the validated Wahab env `vllm-test`.
+# NOTE: torch/torchvision/torchaudio are NOT listed here. They are installed
+# in a separate, second step in the Dockerfile (cu126 builds, needed to get
+# Volta/sm_70 kernels back). See learnings: default vLLM install pulls a torch
+# that drops V100 support.
+vllm==0.30.0

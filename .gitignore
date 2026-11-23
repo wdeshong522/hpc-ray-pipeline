@@ -1,0 +1,30 @@
+# Secrets and credentials
+.env
+*.token
+**/huggingface/token
+**/stored_tokens
+
+# Research data and model artifacts (see DECISIONS.md D8)
+*.safetensors
+*.gguf
+*.bin
+adapters/
+checkpoints/
+
+# Raw run output (large); summary tables can be committed explicitly
+results/*
+!results/.gitkeep
+
+# SLURM logs
+slurm-*.out
+*.err
+logs/
+
+# Container images
+*.sif
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.ipynb_checkpoints/

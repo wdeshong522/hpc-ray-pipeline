@@ -16,7 +16,7 @@ Last updated: 2026-11-22 (late night)
 | D5 | Judge calls per response and thinking mode baseline | open | Fix both as config defaults, then sweep them as the proposal's tunables. |
 | D6 | Score aggregation function | open | Mean, configurable. |
 | D7 | Ray's role beyond LoRA | open | Ray Train for LoRA only. Replicas for generation and judging are SLURM-launched vLLM servers. SLURM accounting and vLLM metrics for those stages. |
-| D8 | Public repo and the dataset | open | Repo is public until the project is turned in, then private. Keep `data/` out of the repo: document the schema, include a tiny synthetic sample, read the real data from a configurable path. Confirm with advisor before publishing any scenarios. |
+| D8 | Public repo and the dataset | decided | Repo is public until the project is turned in, then private. The 4,000-record corpus is synthetic and about 10 MB, so it is committed under `data/` (the `data/*` rule is removed from `.gitignore`). Tokens, model files, results and SLURM logs stay ignored. |
 | D9 | Wahab size: proposal says 18 GPU nodes / 72 V100; `sinfo` shows 16 nodes in `gpu` and `timed-gpu` | decided | 16 nodes, 64 V100s. Fix the numbers in the presentation. Scaling plan needs at most 24 GPUs (6 nodes), so it is unaffected. At the time of checking, 9 of 16 nodes were in use by other jobs. |
 | D10 | Partition choice: `timed-gpu` has a 2 h limit, `gpu` has 14 days | leaning | Use `gpu` for any run that may exceed 2 h (the 1-GPU LoRA baseline is estimated at about 2.5 to 3 h). Use `main` (CPU) for non-GPU work such as image conversion. |
 | D11 | Record SLURM-granted GPUs and nodes in timing records | decided | No. Configuration under test lives in `params`; only job ID, name, nodelist and CPUs per task are captured. |
@@ -33,6 +33,7 @@ Last updated: 2026-11-22 (late night)
 | D22 | Ray worker placement | decided | `PACK`, not `STRICT_PACK`. 8 GPUs spans two 4-GPU nodes; `STRICT_PACK` cannot place that. |
 | D23 | Validation split and eval during LoRA training | decided | No train/eval split and no mid-run eval or mid-run checkpoints. Train on all N examples (4,000 at the top strong-scaling point), matching the proposal's workloads exactly. Sanity check is the logged training loss. No quality claim across GPU counts (global batch grows with GPUs; learning rate not retuned). |
 | D24 | Startup vs processing boundary (all training runs) | decided | Startup = Ray cluster start, worker launch, tokenizer, dataset prep, model load, LoRA setup (everything before the first training step). Processing = `trainer.train()` only. Same rule as the vLLM stages, where model load is startup. Model load is replicated per worker and does not scale, so it must not sit inside processing. |
+| D25 | Five malformed lines in the training corpus | decided (pending Will's confirmation) | Leave data files untouched. Malformed or unusable lines are skipped and reported (not hidden); each run records the skipped count. Pool is exactly 4,000 unique records (verified 2026-11-22: good=4000, unique=4000, 5 bad lines in domain10_batch11, domain10_batch15 x2, domain1_batch14, domain6_batch11), matching the proposal's top workload. Repairing the lines would grow the pool to 4,005 and change every prefix, so it is out of scope. |
  
 ## Open items that are not yet decisions
  

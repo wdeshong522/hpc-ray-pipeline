@@ -50,23 +50,16 @@ def test_take_too_many_raises():
     raise AssertionError("expected ValueError")
 
 
-def test_load_records_reads_nested_files_and_rejects_bad_lines():
+def test_load_records_reads_nested_files():
     with tempfile.TemporaryDirectory() as d:
         (Path(d) / "sub").mkdir()
         write_jsonl(d, "a.jsonl", make_records(3))
         write_jsonl(Path(d) / "sub", "b.jsonl", make_records(2))
-        assert len(load_records(d)) == 5
-        with open(Path(d) / "bad.jsonl", "w") as fh:
-            fh.write("{not json}\n")
-        try:
-            load_records(d)
-        except ValueError:
-            return
-        raise AssertionError("expected ValueError")
+        records, problems = load_records(d)
+        assert len(records) == 5 and problems == []
 
 
-def test_scan_reports_every_problem_without_stopping():
-    from src.train.data import scan_records
+def test_bad_lines_are_skipped_and_reported():
     with tempfile.TemporaryDirectory() as d:
         write_jsonl(d, "a.jsonl", make_records(3))
         with open(Path(d) / "b.jsonl", "w") as fh:
@@ -74,7 +67,7 @@ def test_scan_reports_every_problem_without_stopping():
             fh.write(json.dumps({"conversations": [
                 {"from": "human", "value": "alone"}]}) + "\n")
             fh.write(json.dumps({"other": 1}) + "\n")
-        good, problems = scan_records(d)
+        good, problems = load_records(d)
         assert len(good) == 3
         assert [p[1] for p in problems] == [1, 2, 3]
 

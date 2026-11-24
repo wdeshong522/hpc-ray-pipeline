@@ -28,29 +28,6 @@ def stable_id(record):
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def load_records(data_dir):
-    """Read every .jsonl under data_dir. Any malformed line is an error."""
-    files = sorted(glob.glob(os.path.join(data_dir, "**", "*.jsonl"),
-                             recursive=True))
-    if not files:
-        raise FileNotFoundError(f"no .jsonl files under {data_dir}")
-    records = []
-    for path in files:
-        with open(path, "r", encoding="utf-8") as fh:
-            for lineno, line in enumerate(fh, start=1):
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    obj = json.loads(line)
-                except json.JSONDecodeError as exc:
-                    raise ValueError(f"{path} line {lineno}: {exc}") from exc
-                if not isinstance(obj.get("conversations"), list):
-                    raise ValueError(f"{path} line {lineno}: no conversations")
-                records.append(obj)
-    return records
-
-
 def ordered_pool(records, seed=SHUFFLE_SEED):
     """One fixed shuffle: sort by content hash, then seeded shuffle.
 
@@ -93,11 +70,17 @@ def build_dataset(records, tokenizer):
     return Dataset.from_list(texts)
 
 
-def scan_records(data_dir):
-    """Report-only pass: (good records, list of (file, line, problem))."""
+def load_records(data_dir):
+    """Read every .jsonl under data_dir.
+
+    Returns (records, problems). Malformed or unusable lines are skipped and
+    listed in problems as (file, line number, reason), never hidden.
+    """
     files = sorted(glob.glob(os.path.join(data_dir, "**", "*.jsonl"),
                              recursive=True))
-    good, problems = [], []
+    if not files:
+        raise FileNotFoundError(f"no .jsonl files under {data_dir}")
+    records, problems = [], []
     for path in files:
         with open(path, "r", encoding="utf-8") as fh:
             for lineno, line in enumerate(fh, start=1):
@@ -115,14 +98,14 @@ def scan_records(data_dir):
                 if len(to_messages(obj)) < 2:
                     problems.append((path, lineno, "fewer than two turns"))
                     continue
-                good.append(obj)
-    return good, problems
+                records.append(obj)
+    return records, problems
 
 
 if __name__ == "__main__":
     import sys
 
-    good, problems = scan_records(sys.argv[1])
+    good, problems = load_records(sys.argv[1])
     print(f"good={len(good)} problems={len(problems)} "
           f"unique_good={len({stable_id(r) for r in good})}")
     for path, lineno, why in problems:

@@ -1,12 +1,12 @@
 # Decisions and Deviations
- 
+
 Rule: `PROPOSAL.md` is the scope. Anything that differs from it, or that the
 proposal leaves open, is logged here **before** we build on it.
- 
+
 Status values: `open` / `leaning` / `decided` / `deviation (approved)`.
- 
+
 Last updated: 2026-11-22 (late night)
- 
+
 | # | Topic | Status | Decision / current position |
 |---|---|---|---|
 | D1 | Problem section says "merged model"; merging 8B models needed 24 GB VRAM in earlier tests (V100s have 16 GB) | open | Serve base + LoRA adapter via vLLM `--enable-lora` instead of merging. Would be a deviation from the proposal's "merged model" wording. Needs approval before Stage 2. |
@@ -33,20 +33,24 @@ Last updated: 2026-11-22 (late night)
 | D22 | Ray worker placement | decided | `PACK`, not `STRICT_PACK`. 8 GPUs spans two 4-GPU nodes; `STRICT_PACK` cannot place that. |
 | D23 | Validation split and eval during LoRA training | decided | No train/eval split and no mid-run eval or mid-run checkpoints. Train on all N examples (4,000 at the top strong-scaling point), matching the proposal's workloads exactly. Sanity check is the logged training loss. No quality claim across GPU counts (global batch grows with GPUs; learning rate not retuned). |
 | D24 | Startup vs processing boundary (all training runs) | decided | Startup = Ray cluster start, worker launch, tokenizer, dataset prep, model load, LoRA setup (everything before the first training step). Processing = `trainer.train()` only. Same rule as the vLLM stages, where model load is startup. Model load is replicated per worker and does not scale, so it must not sit inside processing. |
-| D25 | Five malformed lines in the training corpus | decided (pending Will's confirmation) | Leave data files untouched. Malformed or unusable lines are skipped and reported (not hidden); each run records the skipped count. Pool is exactly 4,000 unique records (verified 2026-11-22: good=4000, unique=4000, 5 bad lines in domain10_batch11, domain10_batch15 x2, domain1_batch14, domain6_batch11), matching the proposal's top workload. Repairing the lines would grow the pool to 4,005 and change every prefix, so it is out of scope. |
- 
+| D25 | Five malformed lines in the training corpus | decided | Leave data files untouched. Malformed or unusable lines are skipped and reported (not hidden); each run records the skipped count. Pool is exactly 4,000 unique records (verified 2026-11-22: good=4000, unique=4000, 5 bad lines in domain10_batch11, domain10_batch15 x2, domain1_batch14, domain6_batch11), matching the proposal's top workload. Repairing the lines would grow the pool to 4,005 and change every prefix, so it is out of scope. |
+| D26 | Pad token for LoRA training | decided | Pad = Llama's `<|finetune_right_pad_id|>`, never the eos token. Verified 2026-11-24 on four real examples (`experiments/check_eot_labels.py`): with pad = eos, 0 of 12 end-of-turn tokens keep a training label (the model would never learn to stop); with our pad token, 12 of 12 do. `load_tokenizer` raises if pad equals eos. |
+| D27 | Fixed LoRA training settings and epochs | decided | Fixed: rank 16, alpha 32, dropout 0.05, learning rate 3e-4, max sequence length 2048 (same final settings both earlier sweeps converged on). Tunables (proposal): per-device batch (default 1) and gradient accumulation (default 8). **1 epoch** (earlier sweeps used 3): the proposal fixes example counts, not epochs; 1 epoch cuts the training grid from about 60 to about 20 GPU-hours. State on the methods slide. Limitation: at 8 GPUs the global batch is 64, so 1 epoch over 4,000 examples is about 62 optimizer steps; the adapter is lightly trained and downstream generation uses it. No quality claim (D23). |
+
 ## Open items that are not yet decisions
- 
+
 - **Queue timing for the 24-GPU judging point:** needs 6 idle GPU nodes; pick a quiet window and check `sinfo` beforehand.
 - **Startup measurement rule:** first Qwen3-8B load took 366 s (215 s was a first-time download, 142 s NFS read). Decide whether to report cold or warm cache, and pre-stage weights before timed runs.
 - **Strong-scaling workload sizes:** fixed by pilot runs (1-GPU baselines must finish in practical time).
 - **Training cost:** extrapolated from earlier Granite timings (not measured for Llama); confirm in the Phase 2 pilot.
+
 - **Ray cluster startup:** one Ray head on the first node and one worker per other node, started inside the SLURM job via `srun` + `apptainer exec --nv`, before the driver connects. Per-job unique ports.
-- **Ray dashboard:** the existing code sets `include_dashboard=False` (log spam on Turing). The proposal's analysis uses the Ray dashboard/timeline. Decide how to get that data without the noise.
+- **Ray dashboard:** started with `--include-dashboard=false` (the old code disabled it because of log spam on Turing). The proposal's analysis uses the Ray dashboard/timeline. Revisit after the first multi-GPU runs: decide how to get timeline data without the dashboard.
+
 ## Cluster notes (working knowledge, not decisions)
- 
+
 - **Two-node NCCL (checked 2026-11-22):** inside the container, NCCL 2.20.5 uses InfiniBand (`NET/IB`, mlx5_0) between nodes; no TCP fallback. Measured 3.93 GB/s bus bandwidth for a 256 MB fp32 all-reduce on 2 nodes x 1 GPU (`experiments/nccl_check.py`). GPU Direct RDMA is disabled on Wahab, so GPU traffic is staged through host memory. The `ibv_set_ece` warnings are harmless.
+
 - Wahab's login shell is csh/tcsh. Run `bash` first for `export` and `VAR=value` syntax.
 - Heavy jobs (for example converting a container image) must run as batch jobs on compute nodes, not on a login node.
 - `!` typed at an interactive prompt can trigger history expansion; prefer `sbatch --wrap` or the file editor over heredocs containing `#!`.
- 

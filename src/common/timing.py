@@ -99,24 +99,44 @@ class RunRecorder:
             yield
             completed = True
         finally:
-            duration = time.perf_counter() - start_perf
-            self._durations[phase] += duration
-            record = {
-                "run_id": self.run_id,
-                "stage": self.stage,
-                "tag": self.tag,
-                "phase": phase,
-                "start_unix": start_unix,
-                "end_unix": time.time(),
-                "duration_s": duration,
-                "completed": completed,
-                "host": socket.gethostname(),
-                "pid": os.getpid(),
-                "params": self.params,
-                **_slurm_context(),
-            }
-            with open(self.path, "a", encoding="utf-8") as f:
-                f.write(json.dumps(record) + "\n")
+            self._append(phase, start_unix, time.time(),
+                         time.perf_counter() - start_perf, completed)
+
+    def add_interval(self, phase: str, start_unix: float, end_unix: float,
+                     completed: bool = True):
+        """Records an interval whose start and end were measured elsewhere.
+
+        Used when a span cannot be wrapped in a `with` block, for example
+        cluster start plus worker launch, which begins in the SLURM script
+        and ends inside another process. Both times must be wall-clock
+        (time.time()) values so they compare across nodes.
+        """
+        if phase not in ALLOWED_PHASES:
+            raise ValueError(
+                f"phase must be one of {ALLOWED_PHASES}, got {phase!r}")
+        if end_unix < start_unix:
+            raise ValueError("end_unix is before start_unix")
+        self._append(phase, start_unix, end_unix, end_unix - start_unix,
+                     completed)
+
+    def _append(self, phase, start_unix, end_unix, duration, completed):
+        self._durations[phase] += duration
+        record = {
+            "run_id": self.run_id,
+            "stage": self.stage,
+            "tag": self.tag,
+            "phase": phase,
+            "start_unix": start_unix,
+            "end_unix": end_unix,
+            "duration_s": duration,
+            "completed": completed,
+            "host": socket.gethostname(),
+            "pid": os.getpid(),
+            "params": self.params,
+            **_slurm_context(),
+        }
+        with open(self.path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(record) + "\n")
 
     def summary(self) -> dict:
         """Totals per phase for THIS recorder instance, plus startup share."""

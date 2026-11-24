@@ -52,8 +52,29 @@ def test_unknown_phase_rejected():
         raise AssertionError("expected ValueError")
 
 
+def test_add_interval_records_explicit_span():
+    with tempfile.TemporaryDirectory() as d:
+        rec = RunRecorder(d, "toy_rep1", "lora", tag="driver")
+        rec.add_interval("startup", 100.0, 130.5)
+        got = load_records(d)
+        assert len(got) == 1
+        assert got[0]["duration_s"] == 30.5
+        assert got[0]["start_unix"] == 100.0 and got[0]["end_unix"] == 130.5
+        try:
+            rec.add_interval("startup", 10.0, 5.0)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("expected ValueError for reversed span")
+        try:
+            rec.add_interval("loading", 1.0, 2.0)
+        except ValueError:
+            return
+        raise AssertionError("expected ValueError for bad phase")
+
+
 if __name__ == "__main__":
-    test_two_phases_recorded_and_separate()
-    test_failed_block_is_still_recorded_and_marked()
-    test_unknown_phase_rejected()
+    for name, fn in list(globals().items()):
+        if name.startswith("test_"):
+            fn()
     print("timing tests passed")

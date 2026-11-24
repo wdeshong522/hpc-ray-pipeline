@@ -22,6 +22,7 @@ NODES=($(scontrol show hostnames "$SLURM_JOB_NODELIST"))
 HEAD=${NODES[0]}
 HEAD_IP=$(getent ahostsv4 "$HEAD" | awk 'NR==1{print $1}')
 PORT=$((20000 + SLURM_JOB_ID % 20000))
+DASH=$((40000 + SLURM_JOB_ID % 20000))
 GPN=$(( GPUS < 4 ? GPUS : 4 ))
 
 trap 'kill $(jobs -p) 2>/dev/null' EXIT
@@ -29,7 +30,7 @@ trap 'kill $(jobs -p) 2>/dev/null' EXIT
 srun --overlap -N1 -n1 -w "$HEAD" --gres=gpu:$GPN $CTR $RAY start --head \
     --node-ip-address="$HEAD_IP" --port=$PORT \
     --num-cpus="$SLURM_CPUS_PER_TASK" --num-gpus=$GPN \
-    --include-dashboard=false --disable-usage-stats --block &
+    --dashboard-port=$DASH --disable-usage-stats --block &
 
 for node in "${NODES[@]:1}"; do
   srun --overlap -N1 -n1 -w "$node" --gres=gpu:$GPN $CTR $RAY start \

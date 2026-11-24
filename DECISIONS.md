@@ -42,10 +42,10 @@ Last updated: 2026-11-22 (late night)
 - **Queue timing for the 24-GPU judging point:** needs 6 idle GPU nodes; pick a quiet window and check `sinfo` beforehand.
 - **Startup measurement rule:** first Qwen3-8B load took 366 s (215 s was a first-time download, 142 s NFS read). Decide whether to report cold or warm cache, and pre-stage weights before timed runs.
 - **Strong-scaling workload sizes:** fixed by pilot runs (1-GPU baselines must finish in practical time).
-- **Training cost:** extrapolated from earlier Granite timings (not measured for Llama); confirm in the Phase 2 pilot.
+- **Training cost (first measurement, 2026-11-24):** 0.93 examples/s on 1 V100 (16-example run, rough), so about 72 min of processing for 4,000 examples at 1 epoch. Worker startup was 351 s (model load and 4-bit quantization from the shared filesystem) and driver startup (Ray cluster start plus worker launch) 54 s. Confirm at larger sizes; decide the cold vs warm cache reporting rule.
 
 - **Ray cluster startup:** one Ray head on the first node and one worker per other node, started inside the SLURM job via `srun` + `apptainer exec --nv`, before the driver connects. Per-job unique ports.
-- **Ray dashboard:** started with `--include-dashboard=false` (the old code disabled it because of log spam on Turing). The proposal's analysis uses the Ray dashboard/timeline. Revisit after the first multi-GPU runs: decide how to get timeline data without the dashboard.
+- **Ray dashboard:** first run (1 GPU, 16 examples) with the dashboard disabled still logged `Failed to query Ray Train Controller actor state` repeatedly, so disabling it does not fix that noise here. Now started with the dashboard on, each job on its own port (`40000 + job id % 20000`). Check whether the noise stops and whether timeline data is obtainable.
 
 ## Cluster notes (working knowledge, not decisions)
 

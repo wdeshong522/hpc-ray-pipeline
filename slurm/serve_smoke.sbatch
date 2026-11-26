@@ -27,7 +27,7 @@ mkdir -p results/_slurm
 
 trap 'kill $(jobs -p) 2>/dev/null' EXIT
 
-apptainer exec --nv "$SIF" $PY -m vllm.entrypoints.openai.api_server \
+apptainer exec --nv "$SIF" bash slurm/in_serve_env.sh $PY -m vllm.entrypoints.openai.api_server \
     --model "$BASE" --tokenizer "$ADAPTER" \
     --enable-lora --lora-modules "$NAME=$ADAPTER" \
     --pipeline-parallel-size 2 --dtype float16 --max-model-len 4096 \

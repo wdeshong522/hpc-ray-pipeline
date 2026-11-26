@@ -1,6 +1,6 @@
 # Schedule
 
-Last updated: Tue 2026-11-24, afternoon. Build target Sun 11/29. Presentation
+Last updated: Wed 2026-11-25, evening. Build target Sun 11/29. Presentation
 Thu 12/3. Scope is `PROPOSAL.md`; changes go in `DECISIONS.md`.
 
 ## Status
@@ -13,11 +13,13 @@ Thu 12/3. Scope is `PROPOSAL.md`; changes go in `DECISIONS.md`.
 | 8-bit judging | decided: not possible on V100, run the pipeline-parallel case (D19) |
 | Two-node network check (InfiniBand) | done: NCCL uses IB, 3.93 GB/s |
 | Training data module (`src/train/data.py`) | done, tested, corpus verified (4,000 usable records) |
-| Model module, trainer, Ray launcher | next |
-| Two-node Ray cluster inside the container | open |
-| Llama 3.1 train smoke test; Llama PP2 + LoRA serving test | open |
+| Model module, trainer, Ray launcher | done |
+| Two-node Ray cluster inside the container | done (1, 2, 4, 8 GPUs) |
+| Stage 1 scaling grid (7 configs x 3 repeats) | done Wed 11/25; strong 100/97/90% at 2/4/8 GPUs, weak 95-98% |
+| Llama PP2 + LoRA serving test (one replica) | works; see D1 and D31 for the open questions it raised |
 | Generation stage, judging stage, driver | not started |
-| Training cost (Llama, measured) | not measured; the 2.5 to 3 h per 1-GPU 4,000-example pass is extrapolated from Granite |
+| Training cost (Llama, measured) | measured: about 61 min of processing for 4,000 examples on 1 GPU |
+| Per-user GPU cap (14) | open: admin email, decision Fri 11/27 (D28) |
 
 ## Day by day
 

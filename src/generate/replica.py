@@ -81,6 +81,13 @@ def barrier(index, replicas, host, port, timeout_s, sleep=time.sleep, clock=time
         conn.close()
 
 
+def ensure_fresh(run_dir, index):
+    """Refuse to write into a run directory that already holds this replica's output."""
+    for name in (f"generation__replica{index}.jsonl", f"responses_replica{index}.ndjson"):
+        if (Path(run_dir) / name).exists():
+            raise FileExistsError(f"{run_dir}/{name} already exists; run ids must be unique")
+
+
 def server_command(model_dir, port):
     return [sys.executable, "-m", "vllm.entrypoints.openai.api_server",
             "--model", model_dir, "--served-model-name", SERVED_NAME,
@@ -179,6 +186,7 @@ def main(argv=None):
     port = 8000 + int(os.environ.get("SLURM_JOB_ID", 0)) % 1000
     run_dir = Path(a.results_dir) / a.run_id
     run_dir.mkdir(parents=True, exist_ok=True)
+    ensure_fresh(run_dir, a.index)
     rec = RunRecorder(a.results_dir, a.run_id, "generation", f"replica{a.index}",
                       {"replicas": a.replicas, "gpus": PP_SIZE * a.replicas,
                        "n_scenarios": a.n_scenarios, "pp_size": PP_SIZE,

@@ -7,7 +7,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from src.generate.replica import barrier, prompt_messages, run_client, shard  # noqa: E402
+from src.generate.replica import barrier, ensure_fresh, prompt_messages, run_client, shard  # noqa: E402
 
 
 def test_shard_covers_everything_once():
@@ -49,6 +49,18 @@ def test_barrier_times_out_without_the_others():
 
 def test_single_replica_barrier_returns():
     barrier(0, 1, "localhost", 31779, 1)
+
+
+def test_ensure_fresh_refuses_existing_output():
+    with tempfile.TemporaryDirectory() as d:
+        ensure_fresh(d, 0)
+        (Path(d) / "generation__replica0.jsonl").write_text("{}\n")
+        try:
+            ensure_fresh(d, 0)
+        except FileExistsError:
+            ensure_fresh(d, 1)
+            return
+        raise AssertionError("expected FileExistsError")
 
 
 class _Handler(BaseHTTPRequestHandler):

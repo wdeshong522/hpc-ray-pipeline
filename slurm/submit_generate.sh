@@ -16,6 +16,11 @@ else
     RUN_ID="gen_r${R}_n${N}_c${C}_rep${REP}"
 fi
 
+if [ -e "results/$RUN_ID" ]; then
+    echo "results/$RUN_ID already exists; move it away first" >&2
+    exit 1
+fi
+
 mkdir -p results/_slurm
 sbatch --nodes="$R" --ntasks="$R" \
     -J "$RUN_ID" -o "results/_slurm/%x_%j.log" \

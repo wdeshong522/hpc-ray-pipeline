@@ -23,6 +23,8 @@ HEAD=${NODES[0]}
 HEAD_IP=$(getent ahostsv4 "$HEAD" | awk 'NR==1{print $1}')
 PORT=$((20000 + SLURM_JOB_ID % 20000))
 DASH=$((40000 + SLURM_JOB_ID % 20000))
+MINW=$((10000 + (SLURM_JOB_ID % 100) * 100))
+MAXW=$((MINW + 99))
 GPN=$(( GPUS < 4 ? GPUS : 4 ))
 
 trap 'kill $(jobs -p) 2>/dev/null' EXIT
@@ -30,12 +32,14 @@ trap 'kill $(jobs -p) 2>/dev/null' EXIT
 srun --overlap -N1 -n1 -w "$HEAD" --gres=gpu:$GPN $CTR $RAY start --head \
     --node-ip-address="$HEAD_IP" --port=$PORT \
     --num-cpus="$SLURM_CPUS_PER_TASK" --num-gpus=$GPN \
-    --dashboard-port=$DASH --disable-usage-stats --block &
+    --dashboard-port=$DASH --min-worker-port=$MINW --max-worker-port=$MAXW \
+    --disable-usage-stats --block &
 
 for node in "${NODES[@]:1}"; do
   srun --overlap -N1 -n1 -w "$node" --gres=gpu:$GPN $CTR $RAY start \
       --address="$HEAD_IP:$PORT" \
-      --num-cpus="$SLURM_CPUS_PER_TASK" --num-gpus=$GPN --block &
+      --num-cpus="$SLURM_CPUS_PER_TASK" --num-gpus=$GPN \
+      --min-worker-port=$MINW --max-worker-port=$MAXW --block &
 done
 
 srun --overlap -N1 -n1 -w "$HEAD" --gres=none apptainer exec "$SIF" \

@@ -12,9 +12,9 @@ Proposal elements served
 
 Design (deliberately small)
 ---------------------------
-- Only two phases exist: "startup" and "processing". Those are the two
-  the proposal names. Anything else raises an error, so we can't quietly
-  invent a third category the proposal doesn't define.
+- Three phases exist: "startup" and "processing" (the two the proposal
+  names) and "barrier" (time a ready replica waits for the others, D34).
+  Anything else raises an error, so we can't quietly invent categories.
 - Each interval is appended as ONE JSON line to a file. Appending a line is
   safe even when several processes (e.g. several replicas) write at once,
   as long as each process writes to its own file, which `tag` is for.
@@ -40,7 +40,7 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 
-ALLOWED_PHASES = ("startup", "processing")
+ALLOWED_PHASES = ("startup", "barrier", "processing")
 
 
 def _slurm_context() -> dict:

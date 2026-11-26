@@ -190,6 +190,7 @@ def main(argv=None):
             items = shard(take(ordered_pool(records), a.n_scenarios), a.index, a.replicas)
             proc = start_server(a.model_dir, port, run_dir / f"server_replica{a.index}.log")
             wait_ready(port, proc, a.ready_timeout)
+        with rec.interval("barrier"):
             barrier(a.index, a.replicas, a.head_host, a.barrier_port, a.barrier_timeout)
         with rec.interval("processing"):
             errors = run_client(port, items, a.concurrency,

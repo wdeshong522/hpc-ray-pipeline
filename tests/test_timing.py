@@ -73,8 +73,18 @@ def test_add_interval_records_explicit_span():
         raise AssertionError("expected ValueError for bad phase")
 
 
+def test_barrier_phase_allowed():
+    with tempfile.TemporaryDirectory() as d:
+        rec = RunRecorder(d, "r", "generation", "replica0")
+        with rec.interval("barrier"):
+            pass
+        assert rec.summary()["barrier"] >= 0.0
+
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):
             fn()
     print("timing tests passed")
+

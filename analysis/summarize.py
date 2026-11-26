@@ -29,6 +29,7 @@ def span(records):
 
 
 WORKER_PREFIXES = ("rank", "replica")
+SCALING_STAGES = ("lora", "generation")
 
 
 def is_worker(record):
@@ -80,7 +81,8 @@ def summarize_all(records):
     by_run = defaultdict(list)
     for r in records:
         by_run[r["run_id"]].append(r)
-    rows = [summarize_run(rs) for rs in by_run.values()]
+    rows = [summarize_run(rs) for rs in by_run.values()
+            if rs[0]["stage"] in SCALING_STAGES]
     return sorted(rows, key=lambda row: (row["stage"], row["gpus"],
                                          row["n_items"], row["run_id"]))
 

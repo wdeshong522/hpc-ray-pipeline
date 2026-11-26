@@ -60,6 +60,14 @@ def test_generation_run_barrier_is_not_startup_or_processing():
     assert s["spread_s"] == 4.0
 
 
+def test_merge_run_is_skipped():
+    merge = [{"run_id": "m", "stage": "merge", "tag": "merge",
+              "phase": "processing", "start_unix": 0.0, "end_unix": 351.0,
+              "duration_s": 351.0, "completed": True, "params": {}}]
+    assert summarize_all(two_gpu_run() + merge)[0]["run_id"] == "lora_g2_n100_rep0"
+    assert len(summarize_all(two_gpu_run() + merge)) == 1
+
+
 def test_incomplete_run_is_flagged():
     assert summarize_run(two_gpu_run(ok=False))["completed"] is False
 

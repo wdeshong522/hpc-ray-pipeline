@@ -29,9 +29,35 @@ def test_spans_and_shares():
     assert s["processing_s"] == 102.0
     assert s["makespan_s"] == 352.0
     assert abs(s["startup_share"] - 250.0 / 352.0) < 1e-9
-    assert abs(s["examples_per_s"] - 100 / 102.0) < 1e-9
-    assert s["rank_spread_s"] == 2.0
+    assert abs(s["items_per_s"] - 100 / 102.0) < 1e-9
+    assert s["spread_s"] == 2.0
     assert s["completed"] is True
+
+
+def gen_rec(run, tag, phase, start, end, replicas=2, n=100):
+    return {"run_id": run, "stage": "generation", "tag": tag, "phase": phase,
+            "start_unix": start, "end_unix": end, "duration_s": end - start,
+            "completed": True,
+            "params": {"replicas": replicas, "gpus": 2 * replicas,
+                       "n_scenarios": n}}
+
+
+def test_generation_run_barrier_is_not_startup_or_processing():
+    run = "gen_r2_n100_rep1"
+    recs = [
+        gen_rec(run, "replica0", "startup", 0.0, 130.0),
+        gen_rec(run, "replica0", "barrier", 130.0, 290.0),
+        gen_rec(run, "replica1", "startup", 0.0, 290.0),
+        gen_rec(run, "replica1", "barrier", 290.0, 290.0),
+        gen_rec(run, "replica0", "processing", 290.0, 337.0),
+        gen_rec(run, "replica1", "processing", 290.0, 333.0),
+    ]
+    s = summarize_run(recs)
+    assert s["gpus"] == 4 and s["n_items"] == 100
+    assert s["startup_s"] == 290.0
+    assert s["barrier_s"] == 160.0
+    assert s["processing_s"] == 47.0
+    assert s["spread_s"] == 4.0
 
 
 def test_incomplete_run_is_flagged():

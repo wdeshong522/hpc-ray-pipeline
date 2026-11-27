@@ -85,3 +85,35 @@ if __name__ == "__main__":
         if name.startswith("test_"):
             fn()
     print("summarize tests passed")
+
+
+def judge_rec(run, tag, phase, start, end, mode="parallel", gpus=4, n=100):
+    return {"run_id": run, "stage": "judging", "tag": tag, "phase": phase,
+            "start_unix": start, "end_unix": end, "duration_s": end - start,
+            "completed": True,
+            "params": {"gpus": gpus, "n_responses": n, "mode": mode}}
+
+
+def test_judging_parallel_takes_slowest_task_and_idle_share():
+    run = "judge_u1_n100_rep1"
+    recs = [judge_rec(run, "qwen0", "startup", 0, 300), judge_rec(run, "granite0", "startup", 0, 360),
+            judge_rec(run, "qwen0", "barrier", 300, 360), judge_rec(run, "granite0", "barrier", 360, 360),
+            judge_rec(run, "qwen0", "processing", 360, 460), judge_rec(run, "granite0", "processing", 360, 480)]
+    s = summarize_run(recs)
+    assert s["gpus"] == 4 and s["n_items"] == 100
+    assert s["startup_s"] == 360 and s["barrier_s"] == 60 and s["processing_s"] == 120
+    assert s["qwen_s"] == 100 and s["granite_s"] == 120
+    assert abs(s["idle_share"] - 20 / 120) < 1e-9
+    assert s["spread_s"] == 20
+
+
+def test_judging_serial_adds_both_judges():
+    run = "judge_serial_n100_rep1"
+    recs = [judge_rec(run, "qwen0", "startup", 0, 300, "serial", 2),
+            judge_rec(run, "qwen0", "processing", 300, 400, "serial", 2),
+            judge_rec(run, "granite0", "startup", 400, 700, "serial", 2),
+            judge_rec(run, "granite0", "processing", 700, 820, "serial", 2)]
+    s = summarize_run(recs)
+    assert s["gpus"] == 2
+    assert s["startup_s"] == 600 and s["processing_s"] == 220
+    assert s["idle_share"] is None and s["spread_s"] == 0.0

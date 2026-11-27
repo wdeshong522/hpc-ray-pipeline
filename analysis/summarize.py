@@ -10,7 +10,8 @@ Definitions (per run, all tags together):
   barrier_s    = longest barrier wait of any replica (generation only)
   makespan_s   = last end - first start over every record
 Training runs have rank* tags and n_examples; generation runs have replica*
-tags and n_scenarios. startup_s is a span over startup records only, so
+tags and n_scenarios; judging runs have qwen*/granite* tags and n_responses
+(serial baseline: both judges' times add; otherwise the slowest task counts). startup_s is a span over startup records only, so
 barrier waiting is never counted as startup or processing (D34).
 """
 import sys
@@ -28,8 +29,8 @@ def span(records):
             - min(r["start_unix"] for r in records))
 
 
-WORKER_PREFIXES = ("rank", "replica")
-SCALING_STAGES = ("lora", "generation")
+WORKER_PREFIXES = ("rank", "replica", "qwen", "granite")
+SCALING_STAGES = ("lora", "generation", "judging")
 
 
 def is_worker(record):
@@ -39,7 +40,7 @@ def is_worker(record):
 def workload(records):
     """Items processed in the run: examples (training) or scenarios (generation)."""
     for r in records:
-        for key in ("n_examples", "n_scenarios"):
+        for key in ("n_examples", "n_scenarios", "n_responses"):
             if key in r["params"]:
                 return r["params"][key]
     raise ValueError("no workload size in params")
@@ -47,9 +48,39 @@ def workload(records):
 
 def gpu_count(records):
     for r in records:
-        if "gpus" in r["params"] and r["stage"] == "generation":
+        if "gpus" in r["params"] and r["stage"] in ("generation", "judging"):
             return r["params"]["gpus"]
     return len({r["tag"] for r in records if r["tag"].startswith("rank")})
+
+
+def tag_sums(records, phase):
+    """Total duration of one phase per tag (a serial judging task has two startups)."""
+    sums = defaultdict(float)
+    for r in records:
+        if r["phase"] == phase:
+            sums[r["tag"]] += r["duration_s"]
+    return sums
+
+
+def judging_times(records):
+    """Judging run: serial adds the two judges' times, parallel takes the slowest task (D37, D41).
+
+    Also returns per-judge processing time and the share of the slower judge's
+    time the faster judge's GPUs sat idle (parallel runs only).
+    """
+    serial = records[0]["params"].get("mode") == "serial"
+    out = {}
+    for phase in ("startup", "barrier", "processing"):
+        values = list(tag_sums(records, phase).values())
+        out[phase] = (sum(values) if serial else max(values, default=0.0))
+    by_judge = defaultdict(float)
+    for tag, d in tag_sums(records, "processing").items():
+        judge = "qwen" if tag.startswith("qwen") else "granite"
+        by_judge[judge] = max(by_judge[judge], d)
+    out["qwen_s"], out["granite_s"] = by_judge["qwen"], by_judge["granite"]
+    slow = max(out["qwen_s"], out["granite_s"])
+    out["idle_share"] = None if serial or not slow else (slow - min(out["qwen_s"], out["granite_s"])) / slow
+    return out
 
 
 def summarize_run(records):
@@ -60,14 +91,25 @@ def summarize_run(records):
     n_items = workload(records)
     startup_s = span(startup)
     processing_s = span(processing)
-    return {
+    extra = {}
+    if records[0]["stage"] == "judging":
+        times = judging_times(records)
+        startup_s, processing_s = times["startup"], times["processing"]
+        extra = {"qwen_s": times["qwen_s"], "granite_s": times["granite_s"],
+                 "idle_share": times["idle_share"]}
+        barrier_s = times["barrier"]
+        serial = records[0]["params"].get("mode") == "serial"
+        proc_durations = [] if serial else list(tag_sums(records, "processing").values())
+    else:
+        barrier_s = max((r["duration_s"] for r in barrier), default=0.0)
+    row = {
         "run_id": records[0]["run_id"],
         "stage": records[0]["stage"],
         "gpus": gpu_count(records),
         "n_items": n_items,
         "makespan_s": span(records),
         "startup_s": startup_s,
-        "barrier_s": max((r["duration_s"] for r in barrier), default=0.0),
+        "barrier_s": barrier_s,
         "processing_s": processing_s,
         "startup_share": startup_s / (startup_s + processing_s),
         "items_per_s": n_items / processing_s if processing_s else None,
@@ -75,6 +117,8 @@ def summarize_run(records):
                      if proc_durations else 0.0),
         "completed": all(r["completed"] for r in records),
     }
+    row.update(extra)
+    return row
 
 
 def summarize_all(records):
@@ -98,6 +142,12 @@ def main(results_dir="results"):
               f"{r['barrier_s']:8.1f} {r['processing_s']:8.1f} "
               f"{100 * r['startup_share']:6.1f} {r['items_per_s']:7.2f} "
               f"{r['spread_s']:6.2f} {'yes' if r['completed'] else 'NO'}")
+    judged = [r for r in rows if r["stage"] == "judging"]
+    if judged:
+        print(f"\n{'judging run':24s} {'qwen_s':>8s} {'granite_s':>9s} {'idle%':>6s}")
+        for r in judged:
+            idle = "-" if r["idle_share"] is None else f"{100 * r['idle_share']:.1f}"
+            print(f"{r['run_id']:24s} {r['qwen_s']:8.1f} {r['granite_s']:9.1f} {idle:>6s}")
 
 
 if __name__ == "__main__":

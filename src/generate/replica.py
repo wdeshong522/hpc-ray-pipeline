@@ -81,6 +81,11 @@ def barrier(index, replicas, host, port, timeout_s, sleep=time.sleep, clock=time
         conn.close()
 
 
+def port_for(job_id, index):
+    """One port per replica, so two replicas can share a node."""
+    return 24000 + (job_id % 500) * 8 + index % 8
+
+
 def ensure_fresh(run_dir, index):
     """Refuse to write into a run directory that already holds this replica's output."""
     for name in (f"generation__replica{index}.jsonl", f"responses_replica{index}.ndjson"):
@@ -183,7 +188,7 @@ def parse_args(argv=None):
 
 def main(argv=None):
     a = parse_args(argv)
-    port = 8000 + int(os.environ.get("SLURM_JOB_ID", 0)) % 1000
+    port = port_for(int(os.environ.get("SLURM_JOB_ID", 0)), a.index)
     run_dir = Path(a.results_dir) / a.run_id
     run_dir.mkdir(parents=True, exist_ok=True)
     ensure_fresh(run_dir, a.index)

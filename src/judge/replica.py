@@ -2,6 +2,7 @@
 import argparse
 import json
 import os
+import shutil
 import sys
 import threading
 import time
@@ -10,7 +11,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from src.common.timing import RunRecorder  # noqa: E402
-from src.generate.replica import PP_SIZE, barrier, stop_server, wait_ready  # noqa: E402
+from src.generate.replica import PP_SIZE, barrier, stop_server, triton_cache_dir, wait_ready  # noqa: E402
 from src.judge.inputs import load_items  # noqa: E402
 from src.judge.prompts import load_prompts  # noqa: E402
 from src.judge.smoke import build_calls, judge_call, kv_lines, server_command, start_server  # noqa: E402
@@ -83,10 +84,11 @@ def run_step(a, judge, k, shards, model_dir, run_dir, port, items, registry, rec
     calls = build_calls(mine, registry)
     ids = {index: row["id"] for index, _, row in mine}
     proc = None
+    cache = triton_cache_dir(int(os.environ.get("SLURM_JOB_ID", 0)), a.index, judge)
     try:
         with recorder.interval("startup"):
             proc = start_server(server_command(model_dir, judge, port, MAX_LEN),
-                                run_dir / f"server_{judge}{k}.log")
+                                run_dir / f"server_{judge}{k}.log", triton_cache=cache)
             wait_ready(port, proc, a.ready_timeout)
         if sync:
             with recorder.interval("barrier"):
@@ -101,6 +103,7 @@ def run_step(a, judge, k, shards, model_dir, run_dir, port, items, registry, rec
         return kv_lines(run_dir / f"server_{judge}{k}.log")
     finally:
         stop_server(proc)
+        shutil.rmtree(cache, ignore_errors=True)
 
 
 def parse_args(argv=None):

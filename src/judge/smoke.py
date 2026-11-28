@@ -28,9 +28,11 @@ def server_command(model_dir, served_name, port, max_len):
             "--max-model-len", str(max_len), "--port", str(port)]
 
 
-def start_server(cmd, log_path):
+def start_server(cmd, log_path, triton_cache=None):
     env = dict(os.environ)
     env["LD_LIBRARY_PATH"] = CU13_LIB + ":" + env.get("LD_LIBRARY_PATH", "")
+    if triton_cache:
+        env["TRITON_CACHE_DIR"] = triton_cache
     return subprocess.Popen(cmd, stdout=open(log_path, "w"), stderr=subprocess.STDOUT, env=env)
 
 

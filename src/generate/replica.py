@@ -2,6 +2,7 @@
 import argparse
 import json
 import os
+import shutil
 import socket
 import subprocess
 import sys
@@ -100,9 +101,16 @@ def server_command(model_dir, port):
             "--max-model-len", "4096", "--port", str(port)]
 
 
-def start_server(model_dir, port, log_path):
+def triton_cache_dir(job_id, index, label=""):
+    """Node-local Triton cache per server: replicas sharing a node must not share NFS cache files."""
+    return f"/tmp/triton_{job_id}_{label}{index}"
+
+
+def start_server(model_dir, port, log_path, triton_cache=None):
     env = dict(os.environ)
     env["LD_LIBRARY_PATH"] = CU13_LIB + ":" + env.get("LD_LIBRARY_PATH", "")
+    if triton_cache:
+        env["TRITON_CACHE_DIR"] = triton_cache
     log = open(log_path, "w")
     return subprocess.Popen(server_command(model_dir, port), stdout=log,
                             stderr=subprocess.STDOUT, env=env)
@@ -192,6 +200,7 @@ def main(argv=None):
     run_dir = Path(a.results_dir) / a.run_id
     run_dir.mkdir(parents=True, exist_ok=True)
     ensure_fresh(run_dir, a.index)
+    cache = triton_cache_dir(int(os.environ.get("SLURM_JOB_ID", 0)), a.index)
     rec = RunRecorder(a.results_dir, a.run_id, "generation", f"replica{a.index}",
                       {"replicas": a.replicas, "gpus": PP_SIZE * a.replicas,
                        "n_scenarios": a.n_scenarios, "pp_size": PP_SIZE,
@@ -201,7 +210,8 @@ def main(argv=None):
         with rec.interval("startup"):
             records, _ = load_records(a.data_dir)
             items = shard(take(ordered_pool(records), a.n_scenarios), a.index, a.replicas)
-            proc = start_server(a.model_dir, port, run_dir / f"server_replica{a.index}.log")
+            proc = start_server(a.model_dir, port, run_dir / f"server_replica{a.index}.log",
+                                triton_cache=cache)
             wait_ready(port, proc, a.ready_timeout)
         with rec.interval("barrier"):
             barrier(a.index, a.replicas, a.head_host, a.barrier_port, a.barrier_timeout)
@@ -213,6 +223,7 @@ def main(argv=None):
         print(f"replica {a.index}: {len(items)} scenarios done")
     finally:
         stop_server(proc)
+        shutil.rmtree(cache, ignore_errors=True)
 
 
 if __name__ == "__main__":
